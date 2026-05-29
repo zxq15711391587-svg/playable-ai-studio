@@ -31,9 +31,12 @@ Playable AI Studio 是一个 AI 可玩广告生产平台方案。它不追求让
 
 - React + Vite 前端工作台。
 - 项目接入、阶段流水线、AI 团队状态、创意候选、续作交接日志。
+- 项目资料表单和文件接入，支持记录需求、效果图、效果视频和美术参考。
 - 模型与服务设置面板，包含 Base URL、API Key、各阶段模型选择和测试按钮。
+- 模型测试会向配置的 `Base URL /chat/completions` 发起真实请求。
 - playable 实时预览和编辑面板，支持文案、进度、CTA 时间和 UI 位置调整。
-- HTML 导出入口。
+- 本地持久化项目、设置、编辑字段和 handoff log。
+- HTML 导出入口，可生成单文件 HTML。
 
 ## Development
 

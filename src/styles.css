@@ -405,6 +405,8 @@ button {
 }
 
 .input-block {
+  position: relative;
+  cursor: pointer;
   min-height: 88px;
   padding: 12px;
   border: 1px dashed #b6c5c0;
@@ -428,6 +430,113 @@ button {
   margin-top: 18px;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.input-block input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.output-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fbfa;
+}
+
+.output-box h3 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
+.output-box p,
+.output-box li {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.output-box p {
+  margin: 8px 0 0;
+}
+
+.output-box ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.intake-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+  margin-top: 6px;
+}
+
+.intake-form .full {
+  grid-column: 1 / -1;
+}
+
+.field textarea {
+  width: 100%;
+  min-height: 86px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: #fff;
+  outline: none;
+}
+
+.field textarea:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(26, 155, 143, 0.12);
+}
+
+.material-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.material-list > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.material-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.material-chip strong {
+  color: var(--teal);
+}
+
+.material-chip span {
+  overflow: hidden;
+  max-width: 180px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.material-chip em {
+  color: var(--muted);
+  font-style: normal;
 }
 
 .ai-team {
@@ -770,6 +879,44 @@ button {
 
 .test-button.passed {
   background: #247e56;
+}
+
+.test-button.failed {
+  background: #b64a54;
+}
+
+.test-result {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--panel-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.test-result.passed {
+  border-color: rgba(26, 155, 143, 0.28);
+  color: #176e66;
+  background: var(--teal-soft);
+}
+
+.test-result.failed {
+  border-color: rgba(198, 100, 108, 0.34);
+  color: #8b3039;
+  background: #fff1f2;
+}
+
+.test-result em {
+  white-space: nowrap;
+  color: inherit;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .slider-field input {
