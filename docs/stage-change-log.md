@@ -52,7 +52,38 @@
 
 ### 推送状态
 
-- 待提交并推送。
+- 已提交并推送到 GitHub。
+
+## 2026-05-30：阶段 3 - 本地 AI 代理与阶段执行 API
+
+### 改动内容
+
+- 新增 Vite 本地开发 API：`/api/model-test` 和 `/api/run-stage`。
+- 模型测试改为通过本地代理请求 `chat/completions`，前端不再直接跨域请求模型服务。
+- 阶段执行改为调用 `/api/run-stage`，根据当前阶段选择策划、视频、研发、测试、编导、可玩或 QA 模型。
+- 保存交接改为调用 `/api/save-handoff`，把当前项目写入 `playable-ai-workspace/projects/<project-id>`。
+- 未配置 Base URL 或 API Key 时，阶段执行会返回本地 fallback 结构化产物，保证比赛演示流程不断。
+- 页面增加阶段执行中的禁用状态、失败提示和日志记录。
+- 创意发散阶段执行后停留在“等待选择创意”，避免自动跳过人工确认。
+
+### 目的
+
+- 让平台从“前端模拟流程”推进到“有真实 AI 执行入口”的状态。
+- 避免浏览器端 CORS、API Key 直接跨域暴露和模型接口适配问题。
+- 为后续把阶段产物写入 workspace 仓库、生成视频预演、生成工程任务和导出 QA 报告打基础。
+
+### 验证方式
+
+- `npm run build` 通过 TypeScript 与 Vite 生产构建。
+- `npm audit --audit-level=high` 确认无高危漏洞。
+- 使用 `curl` 验证 `/api/run-stage` 在无 API Key 时返回 fallback 阶段产物。
+- 使用 `curl` 验证 `/api/model-test` 在缺少 API Key 时返回友好错误。
+- 使用 `curl` 或页面按钮验证 `/api/save-handoff` 能生成 workspace 项目上下文包。
+- 使用 in-app browser 打开 `http://127.0.0.1:5175/`，检查页面可渲染、无错误覆盖层，并验证“执行当前阶段”能推进流程。
+
+### 推送状态
+
+- 已提交并推送到 GitHub。
 
 ## 2026-05-29：阶段 1 - 可运行平台原型
 

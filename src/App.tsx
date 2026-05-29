@@ -99,6 +99,31 @@ type ModelTestResult = {
   latencyMs?: number;
 };
 
+type StageRunState = 'idle' | 'running' | 'failed';
+type HandoffSaveState = 'idle' | 'saving' | 'saved' | 'failed';
+
+type ModelTestApiResponse = {
+  ok: boolean;
+  model?: string;
+  latencyMs?: number;
+  message?: string;
+};
+
+type StageApiResponse = {
+  ok: boolean;
+  source?: 'provider' | 'fallback';
+  output?: StageOutput;
+  message?: string;
+};
+
+type HandoffApiResponse = {
+  ok: boolean;
+  projectId?: string;
+  projectPath?: string;
+  files?: string[];
+  message?: string;
+};
+
 type Artifact = {
   title: string;
   meta: string;
@@ -299,10 +324,6 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
-function normalizeBaseUrl(baseUrl: string) {
-  return baseUrl.replace(/\/+$/, '');
-}
-
 function projectIdFromName(name: string) {
   const normalized = name
     .trim()
@@ -324,6 +345,20 @@ function nowLabel() {
     minute: '2-digit',
     hour12: false,
   }).format(new Date());
+}
+
+function nextStageAfterRun(stage: StageId) {
+  if (stage === 'creative') return 'creative';
+  return stageOrder[Math.min(stageOrder.indexOf(stage) + 1, stageOrder.length - 1)];
+}
+
+function statusAfterRun(stage: StageId, nextStage: StageId) {
+  if (stage === 'creative') return '等待选择创意';
+  if (stage === 'selfTest') return '等待人工试玩确认';
+  if (stage === 'playable') return '等待人工试玩确认单条 playable';
+  if (stage === 'editor') return '等待导出 HTML';
+  if (stage === 'export') return '已完成 HTML 导出检查';
+  return `${stages.find((item) => item.id === nextStage)?.title ?? '下一阶段'}待处理`;
 }
 
 function buildStageOutput(stage: StageId, project: Project): StageOutput {
@@ -435,6 +470,9 @@ function App() {
   const [settings, setSettings] = useState<ModelSettings>(() => readStorage(storageKeys.settings, defaultSettings));
   const [testState, setTestState] = useState<ModelTestState>('idle');
   const [testResult, setTestResult] = useState<ModelTestResult>({ status: 'idle', message: '尚未测试模型连接。' });
+  const [stageRunState, setStageRunState] = useState<StageRunState>('idle');
+  const [stageRunError, setStageRunError] = useState('');
+  const [handoffSaveState, setHandoffSaveState] = useState<HandoffSaveState>('idle');
   const [editorState, setEditorState] = useState(() =>
     readStorage(storageKeys.editor, {
       headline: 'Only 1% can solve this',
@@ -478,6 +516,13 @@ function App() {
     window.localStorage.setItem('playable-ai-studio.selectedProject.v1', JSON.stringify(selectedProjectId));
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    const project = projects.find((item) => item.id === selectedProjectId);
+    if (project) {
+      setActiveStage(project.stage);
+    }
+  }, [selectedProjectId]);
+
   function appendLog(message: string) {
     setLog((items) => [`${nowLabel()}  ${message}`, ...items].slice(0, 12));
   }
@@ -503,79 +548,105 @@ function App() {
     appendLog(`创建新项目接入入口：${newProject.id}`);
   }
 
-  function runStage() {
-    const nextIndex = Math.min(stageOrder.indexOf(activeStage) + 1, stageOrder.length - 1);
-    const nextStage = stageOrder[nextIndex];
-    const output = buildStageOutput(activeStage, selectedProject);
-    setProjects((items) =>
-      items.map((project) =>
-        project.id === selectedProject.id
-          ? {
-              ...project,
-              stage: nextStage,
-              status: `${stages.find((stage) => stage.id === nextStage)?.title ?? '下一阶段'}待处理`,
-              updated: '刚刚',
-              outputs: {
-                ...project.outputs,
-                [activeStage]: output,
-              },
-            }
-          : project,
-      ),
-    );
-    setActiveStage(nextStage);
-    appendLog(`执行 ${artifact.title}，生成《${output.title}》并推进到下一阶段。`);
-  }
+  async function runStage() {
+    if (stageRunState === 'running') return;
 
-  async function testModels() {
-    if (!settings.apiKey.trim()) {
-      setTestState('failed');
-      setTestResult({ status: 'failed', message: '请先填写 API Key。' });
-      appendLog('模型测试失败：缺少 API Key。');
-      return;
-    }
-    if (!settings.baseUrl.trim()) {
-      setTestState('failed');
-      setTestResult({ status: 'failed', message: '请先填写 Base URL。' });
-      appendLog('模型测试失败：缺少 Base URL。');
-      return;
-    }
+    setStageRunState('running');
+    setStageRunError('');
+    const stageToRun = activeStage;
+    const nextStage = nextStageAfterRun(stageToRun);
+    const nextStatus = statusAfterRun(stageToRun, nextStage);
 
-    setTestState('testing');
-    setTestResult({ status: 'testing', message: '正在请求 chat/completions 测试策划模型。' });
-    const startedAt = performance.now();
     try {
-      const response = await fetch(`${normalizeBaseUrl(settings.baseUrl)}/chat/completions`, {
+      const response = await fetch('/api/run-stage', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${settings.apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: settings.models.planner,
-          messages: [
-            {
-              role: 'user',
-              content: '请只回复 OK，用于测试 Playable AI Studio 模型连接。',
-            },
-          ],
-          max_tokens: 8,
-          temperature: 0,
+          settings,
+          stage: stageToRun,
+          project: selectedProject,
         }),
       });
-      const latencyMs = Math.round(performance.now() - startedAt);
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 160)}`);
+      const payload = (await response.json()) as StageApiResponse;
+      if (!response.ok || !payload.ok || !payload.output) {
+        throw new Error(payload.message || `${response.status} ${response.statusText}`);
       }
-      const payload = (await response.json()) as { model?: string };
+
+      setProjects((items) =>
+        items.map((project) =>
+          project.id === selectedProject.id
+            ? {
+                ...project,
+                stage: nextStage,
+                status: nextStatus,
+                updated: '刚刚',
+                outputs: {
+                  ...project.outputs,
+                  [stageToRun]: payload.output,
+                },
+              }
+            : project,
+        ),
+      );
+      setActiveStage(nextStage);
+      setStageRunState('idle');
+      appendLog(
+        nextStage === stageToRun
+          ? `执行 ${artifact.title}，生成《${payload.output.title}》，等待人工确认（${payload.source === 'provider' ? '模型' : '本地 fallback'}）。`
+          : `执行 ${artifact.title}，生成《${payload.output.title}》并推进到下一阶段（${payload.source === 'provider' ? '模型' : '本地 fallback'}）。`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知错误';
+      const output = buildStageOutput(stageToRun, selectedProject);
+      setProjects((items) =>
+        items.map((project) =>
+          project.id === selectedProject.id
+            ? {
+                ...project,
+                stage: nextStage,
+                status: nextStatus,
+                updated: '刚刚',
+                outputs: {
+                  ...project.outputs,
+                  [stageToRun]: output,
+                },
+              }
+            : project,
+        ),
+      );
+      setActiveStage(nextStage);
+      setStageRunState('failed');
+      setStageRunError(`AI 代理调用失败，已使用前端 fallback 继续流程：${message}`);
+      appendLog(`阶段代理失败，使用前端 fallback 生成《${output.title}》${nextStage === stageToRun ? '，等待人工确认' : '并推进到下一阶段'}：${message}`);
+    }
+  }
+
+  async function testModels() {
+    setTestState('testing');
+    setTestResult({ status: 'testing', message: '正在通过本地代理测试策划模型。' });
+    try {
+      const response = await fetch('/api/model-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          settings,
+        }),
+      });
+      const payload = (await response.json()) as ModelTestApiResponse;
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || `${response.status} ${response.statusText}`);
+      }
       setTestState('passed');
       setTestResult({
         status: 'passed',
-        latencyMs,
-        message: `连接正常：${payload.model ?? settings.models.planner}，${latencyMs}ms。`,
+        latencyMs: payload.latencyMs,
+        message: `连接正常：${payload.model ?? settings.models.planner}${payload.message ? `，返回 ${payload.message}` : ''}。`,
       });
-      appendLog(`模型连接测试通过：${payload.model ?? settings.models.planner}，${latencyMs}ms。`);
+      appendLog(`模型连接测试通过：${payload.model ?? settings.models.planner}，${payload.latencyMs ?? 0}ms。`);
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误';
       setTestState('failed');
@@ -653,8 +724,35 @@ function App() {
     appendLog(`选择创意《${name}》，进入单条 playable 制作。`);
   }
 
-  function saveHandoff() {
-    appendLog(`保存交接：${selectedProject.name} 当前阶段 ${artifact.title}。`);
+  async function saveHandoff() {
+    if (handoffSaveState === 'saving') return;
+
+    setHandoffSaveState('saving');
+    try {
+      const response = await fetch('/api/save-handoff', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          project: selectedProject,
+          activeStage,
+          editorState,
+          logs: log,
+        }),
+      });
+      const payload = (await response.json()) as HandoffApiResponse;
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || `${response.status} ${response.statusText}`);
+      }
+
+      setHandoffSaveState('saved');
+      appendLog(`交接已写入 workspace：${payload.projectPath ?? `projects/${payload.projectId}`}，${payload.files?.length ?? 0} 个文件。`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知错误';
+      setHandoffSaveState('failed');
+      appendLog(`交接保存失败：${message}`);
+    }
   }
 
   function exportPlayableHtml() {
@@ -728,13 +826,13 @@ function App() {
             </p>
           </div>
           <div className="topbar-actions">
-            <button className="ghost-button" type="button" onClick={saveHandoff}>
+            <button className={`ghost-button ${handoffSaveState}`} type="button" onClick={saveHandoff} disabled={handoffSaveState === 'saving'}>
               <Save size={16} />
-              保存交接
+              {handoffSaveState === 'saving' ? '保存中...' : '保存交接'}
             </button>
-            <button className="primary-button" type="button" onClick={runStage}>
+            <button className="primary-button" type="button" onClick={runStage} disabled={stageRunState === 'running'}>
               <Play size={16} />
-              执行当前阶段
+              {stageRunState === 'running' ? '执行中...' : '执行当前阶段'}
             </button>
           </div>
         </header>
@@ -800,6 +898,8 @@ function App() {
                 </ul>
               )}
             </div>
+
+            {stageRunError && <div className="stage-error">{stageRunError}</div>}
 
             <div className="intake-grid">
               <label className="input-block">
@@ -1013,7 +1113,7 @@ function App() {
             ))}
           </div>
 
-          <button className={`test-button ${testState}`} type="button" onClick={testModels}>
+          <button className={`test-button ${testState}`} type="button" onClick={testModels} disabled={testState === 'testing'}>
             {testState === 'testing' ? <RadioTower size={16} /> : <TestTube2 size={16} />}
             {testState === 'idle' && '测试模型'}
             {testState === 'testing' && '测试中...'}
