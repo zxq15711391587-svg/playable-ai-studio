@@ -27,9 +27,23 @@ Playable AI Studio 是一个 AI 可玩广告生产平台方案。它不追求让
 
 ## Current Status
 
-阶段 0 已完成：
+当前已经有第一版可运行平台原型：
 
-- 新建正式主仓库。
-- 确认双仓库协作方式。
-- 写入平台计划和 AI 续作机制。
+- React + Vite 前端工作台。
+- 项目接入、阶段流水线、AI 团队状态、创意候选、续作交接日志。
+- 模型与服务设置面板，包含 Base URL、API Key、各阶段模型选择和测试按钮。
+- playable 实时预览和编辑面板，支持文案、进度、CTA 时间和 UI 位置调整。
+- HTML 导出入口。
 
+## Development
+
+```bash
+npm install
+npm run dev
+```
+
+生产构建：
+
+```bash
+npm run build
+```
