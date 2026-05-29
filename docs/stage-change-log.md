@@ -17,11 +17,12 @@
 
 ### 验证方式
 
-- 确认仓库为 public。
-- 确认 README 能说明仓库职责。
-- 确认没有 `.env`、API key 或敏感素材进入仓库。
+- `gh repo view zxq15711391587-svg/playable-ai-studio --json name,visibility,url,defaultBranchRef` 确认仓库为 public，默认分支为 main。
+- `git clone https://github.com/zxq15711391587-svg/playable-ai-studio.git /private/tmp/playable-ai-studio-verify` 确认公开 clone 可用。
+- `git status --short --branch` 确认本地分支跟踪 `origin/main`。
+- `rg` 扫描确认没有 `.env`、API key 或敏感素材进入仓库。
+- README 已说明：本仓库负责平台系统，`playable-ai-workspace` 负责具体项目。
 
 ### 推送状态
 
-- 待提交并推送。
-
+- 已提交并推送到 GitHub。
